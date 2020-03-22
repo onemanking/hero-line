@@ -13,9 +13,9 @@ namespace Characters
 		private const string _AXIS_VERTICAL = "Vertical";
 
 		public Vector2 Direction { get; private set; }
+		public float Speed { get; private set; } = 1f;
 
 		private bool _Controllable;
-		private float _Speed = 0.5f;
 		private SpriteRenderer _SpriteRenderer;
 
 		protected override void Start()
@@ -35,10 +35,10 @@ namespace Characters
 			void CheckForInput()
 			{
 				var inputHorizontal = Observable.EveryUpdate()
-					.Where(x => Input.GetAxis(_AXIS_HORIZONTAL) != 0 && _Controllable)
+					.Where(x => Input.GetAxis(_AXIS_HORIZONTAL) != 0 && _Controllable && !IsInCombat)
 					.Select(_ => Input.GetAxis(_AXIS_HORIZONTAL));
 				var inputVertical = Observable.EveryUpdate()
-					.Where(x => Input.GetAxis(_AXIS_VERTICAL) != 0 && _Controllable)
+					.Where(x => Input.GetAxis(_AXIS_VERTICAL) != 0 && _Controllable && !IsInCombat)
 					.Select(_ => Input.GetAxis(_AXIS_VERTICAL));
 
 				inputHorizontal.Where(x => Direction != Vector2.right && Direction.x > x || Direction != Vector2.left && Direction.x < x)
@@ -65,14 +65,16 @@ namespace Characters
 			}
 		}
 
-		internal void SetFacing(Vector2 _direction) => Direction = _direction;
+		public void SetFacing(Vector2 _direction) => Direction = _direction;
 
-		internal void SetControllable(bool _controllable) => _Controllable = _controllable;
+		public void SetControllable(bool _controllable) => _Controllable = _controllable;
 
 		private IDisposable _MoveDisposable;
 		private void Move()
 		{
-			Observable.Interval(TimeSpan.FromSeconds(_Speed)).Where(x => _Controllable).Subscribe
+			_MoveDisposable?.Dispose();
+			_MoveDisposable = Observable.Interval(TimeSpan.FromSeconds(1f / Speed))
+			.Where(x => _Controllable && !IsInCombat && GameManager.Instance.IsPlaying).Subscribe
 			(
 				_ =>
 				{
@@ -90,18 +92,37 @@ namespace Characters
 			if (_other.tag == GameManager.TagHero)
 				PlayerController.Instance.AddHero(_other.GetComponent<Hero>());
 			else if (_other.tag == GameManager.TagEnemy)
-				FightEnemy(_other.GetComponent<Character>());
+				GameManager.Instance.Combat(this, _other.GetComponent<Enemy>());
 			else
 				HitWall();
 		}
 
 		private void HitWall()
 		{
-			PlayerController.Instance.RemoveHeroLeader();
+			Hp.Value = 0;
+			PlayerController.Instance.HitWallRemoveLeader(this);
 		}
 
-		internal void InvertDirection() => Direction *= -1;
+		public void IncreaseSpeed(float _value)
+		{
+			Speed += _value;
+			Move();
+		}
+		public void SetSpeed(float _value)
+		{
+			Speed = _value;
+			Move();
+		}
 
-		internal void SetPosition(Vector2 _pos) => transform.position = _pos;
+		public void InvertDirection() => Direction *= -1;
+
+		public void SetPosition(Vector2 _pos) => transform.position = _pos;
+
+		protected override void Die()
+		{
+			PlayerController.Instance.RotateHeroLeader();
+			PlayerController.Instance.RemoveHero(this);
+			base.Die();
+		}
 	}
 }

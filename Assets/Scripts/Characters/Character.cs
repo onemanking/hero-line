@@ -11,23 +11,22 @@ namespace Characters
 
 	public class Character : MonoBehaviour
 	{
-		protected FloatReactiveProperty Hp = new FloatReactiveProperty();
-		protected FloatReactiveProperty Atk = new FloatReactiveProperty();
-		protected FloatReactiveProperty Def = new FloatReactiveProperty();
-		protected Type Type;
+		public FloatReactiveProperty Hp { get; private set; } = new FloatReactiveProperty();
+		public FloatReactiveProperty Atk { get; private set; } = new FloatReactiveProperty();
+		public FloatReactiveProperty Def { get; private set; } = new FloatReactiveProperty();
+		public Type Type { get; private set; }
+		public bool IsInCombat { get; private set; }
 
 		protected virtual void Start()
 		{
 			GetComponent<SpriteRenderer>().sprite = GlobalUtility.RandomSprite();
 
 			GenarateStats();
+
+			Hp.Where(x => x <= 0).Subscribe(_ => Die()).AddTo(this);
 		}
 
-		protected void FightEnemy(Character _other)
-		{
-			var damage = CalculateDamage(_other.Atk.Value);
-			TakeDamage(damage);
-		}
+		protected virtual void Die() => Destroy(gameObject);
 
 		private void GenarateStats()
 		{
@@ -37,11 +36,15 @@ namespace Characters
 			Type = GlobalUtility.RandomType();
 		}
 
-		protected void TakeDamage(float _damage) => Hp.Value -= _damage;
-
-		private float CalculateDamage(float _atk)
+		public void TakeDamage(float _atk)
 		{
-			return _atk - Def.Value;
+			Hp.Value -= CalculateDamage(_atk);
+
+			float CalculateDamage(float _atkLocal)
+			{
+				return _atkLocal - Def.Value < GlobalUtility.LOWEST_DAMAGE ? GlobalUtility.LOWEST_DAMAGE : _atkLocal - Def.Value;
+			}
 		}
+		public void SetIsInCombat(bool _isInCombat) => IsInCombat = _isInCombat;
 	}
 }

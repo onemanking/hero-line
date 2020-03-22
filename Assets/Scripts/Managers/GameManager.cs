@@ -4,16 +4,18 @@ using System.Collections.Generic;
 using Characters;
 using UniRx;
 using UnityEngine;
+using UnityEngine.UI;
+using Utilities;
 
 namespace Managers
 {
-	public class GameManager : MonoBehaviour
+	public class GameManager : Singleton<GameManager>
 	{
 		public enum GameState
 		{
 			Standby,
 			Playing,
-			Gameover
+			GameOver
 		}
 
 		internal const string TagHero = "Hero";
@@ -21,26 +23,15 @@ namespace Managers
 		internal const string TagWall = "Wall";
 
 		private const double _SpawnRateSecond = 2.5f;
+		private const string _STAND_BY_MESSAGE = "Press Z to Rotate Hero\n\nPress Space to Start Game";
+		private const string _GAME_OVER_MESSAGE = "GameOver";
 
-		private static GameManager _instance = null;
-		public static GameManager Instance
-		{
-			get
-			{
-				if (_instance == null)
-				{
-					_instance = FindObjectOfType(typeof(GameManager)) as GameManager;
-					if (_instance == null)
-					{
-						GameObject go = new GameObject();
-						_instance = go.AddComponent<GameManager>();
-						go.name = "GameManager";
-					}
-				}
+		[Header("CONFIG")]
+		[SerializeField] private float m_SpeedIncreasement = 0.1f;
+		[SerializeField] private float m_TypeMultiplier = 2f;
+		[SerializeField] private double m_CombatResolveSec = 0.5f;
 
-				return _instance;
-			}
-		}
+
 		[Header("LEVEL")]
 		[SerializeField] private GameObject m_WallPrefab;
 		[SerializeField] private int m_Row;
@@ -50,25 +41,74 @@ namespace Managers
 		[SerializeField] private Hero m_AvatarPrefab;
 		[SerializeField] private Character[] m_CharacterPrefabs;
 
-		private List<Vector2> gridPosList = new List<Vector2>();
-		private GameState _CurrentState;
+		[Header("UI")]
+		[SerializeField] private Text m_ScoreText;
+		[SerializeField] private Text m_GameStateText;
+
+		private GameState _GameState;
+		public bool IsPlaying => _GameState == GameState.Playing;
+
+		private FloatReactiveProperty _Score = new FloatReactiveProperty();
+		private List<Vector2> _GridPosList = new List<Vector2>();
 
 		private void Start()
 		{
 			InitLevel();
 
-			PlayerController.Instance.SetControllHero(SpawnAvatarHero());
+			StartGameInput();
 
-			Observable.Interval(TimeSpan.FromSeconds(_SpawnRateSecond)).Subscribe(_ =>
+			CheckSpawnCharacter();
+
+			CheckGameOver();
+
+			CheckScore();
+
+			CheckStandbyMessage();
+
+			CheckGameOverMessage();
+
+			void StartGameInput()
 			{
-				SpawnCharacter();
-			}).AddTo(this);
+				Observable.EveryUpdate().Where(x => Input.GetKeyDown(KeyCode.Space) && _GameState == GameState.Standby)
+							.Subscribe(_ => StartGame())
+							.AddTo(this);
+			}
 
-			Observable.EveryUpdate().Where(x => CheckShouldGameOver()).Subscribe(_ => GameOver()).AddTo(this);
-
-			bool CheckShouldGameOver()
+			void CheckSpawnCharacter()
 			{
-				return PlayerController.Instance.HeroCount <= 0;
+				Observable.Interval(TimeSpan.FromSeconds(_SpawnRateSecond))
+							.Where(x => _GameState == GameState.Playing && !PlayerController.Instance.CurrentLeader.IsInCombat)
+							.Subscribe(_ => SpawnCharacter())
+							.AddTo(this);
+			}
+
+			void CheckGameOver()
+			{
+				Observable.EveryUpdate().Where(x => CheckShouldGameOver()).Subscribe(_ => GameOver()).AddTo(this);
+
+				bool CheckShouldGameOver()
+				{
+					return PlayerController.Instance.HeroCount <= 0 && _GameState == GameState.Playing && _GameState != GameState.GameOver;
+				}
+			}
+
+			void CheckScore()
+			{
+				_Score.ObserveEveryValueChanged(_ => _.Value.ToString("0.##")).Subscribe(_score => m_ScoreText.text = _score).AddTo(this);
+			}
+
+			void CheckStandbyMessage()
+			{
+				Observable.EveryUpdate().Where(x => _GameState == GameState.Standby && m_GameStateText.text != _STAND_BY_MESSAGE)
+							.Subscribe(_ => m_GameStateText.text = _STAND_BY_MESSAGE)
+							.AddTo(this);
+			}
+
+			void CheckGameOverMessage()
+			{
+				Observable.EveryUpdate().Where(x => _GameState == GameState.GameOver && m_GameStateText.text != _GAME_OVER_MESSAGE)
+							.Subscribe(_ => m_GameStateText.text = _GAME_OVER_MESSAGE)
+							.AddTo(this);
 			}
 		}
 
@@ -85,7 +125,7 @@ namespace Managers
 			{
 				for (int x = 0; x < m_Row; x++)
 				{
-					gridPosList.Add(new Vector2(1 * x, 1 * y));
+					_GridPosList.Add(new Vector2(1 * x, 1 * y));
 				}
 			}
 
@@ -105,7 +145,7 @@ namespace Managers
 
 		private void SpawnCharacter()
 		{
-			var randomPosition = gridPosList[UnityEngine.Random.Range(0, gridPosList.Count)];
+			var randomPosition = _GridPosList[UnityEngine.Random.Range(0, _GridPosList.Count)];
 			var character = RandomCharacter();
 			character.transform.position = randomPosition;
 
@@ -115,10 +155,64 @@ namespace Managers
 			}
 		}
 
-		public void GameOver()
+		private void StartGame()
 		{
-			_CurrentState = GameState.Gameover;
-			// MenuManager.Instance.Gameover();
+			_GameState = GameState.Playing;
+			m_GameStateText.text = string.Empty;
+			PlayerController.Instance.SetLeaderHero(SpawnAvatarHero(), true);
+		}
+
+		private void GameOver()
+		{
+			_GameState = GameState.GameOver;
+			Observable.Timer(TimeSpan.FromSeconds(2)).Subscribe(_ => Restart()).AddTo(this);
+		}
+
+		private void Restart()
+		{
+			_GameState = GameState.Standby;
+			_Score.Value = 0f;
+			foreach (var character in FindObjectsOfType<Character>())
+			{
+				Destroy(character.gameObject);
+			}
+		}
+
+		private IDisposable _CombatDisposable;
+		public void Combat(Hero _hero, Enemy _enemy)
+		{
+			_enemy.SetIsInCombat(true);
+			_hero.SetIsInCombat(true);
+
+			var heroDmg = GetHeroDmg(_hero, _enemy);
+
+			_CombatDisposable?.Dispose();
+			_CombatDisposable = Observable.Interval(TimeSpan.FromSeconds(m_CombatResolveSec)).Subscribe(_ =>
+			{
+				CameraManager.Instance.Shake(0.2f, 1f, 0.2f);
+
+				_enemy.TakeDamage(heroDmg);
+
+				if (_enemy.Hp.Value > 0) _hero.TakeDamage(_enemy.Atk.Value);
+
+				if (_hero.Hp.Value <= 0 || _enemy.Hp.Value <= 0)
+				{
+					_enemy.SetIsInCombat(false);
+					_hero.SetIsInCombat(false);
+
+					_Score.Value += _hero.Hp.Value > 0 ? _hero.Hp.Value : 0;
+
+					if (_hero.Hp.Value > 0)
+						PlayerController.Instance.IncreasePartySpeed(m_SpeedIncreasement);
+
+					_CombatDisposable.Dispose();
+				}
+			}).AddTo(this);
+
+			float GetHeroDmg(Hero _heroLocal, Enemy _enemyLocal)
+			{
+				return _heroLocal.Type == _enemyLocal.Type ? _heroLocal.Atk.Value * m_TypeMultiplier : _heroLocal.Atk.Value;
+			}
 		}
 	}
 }

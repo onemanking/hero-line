@@ -9,7 +9,6 @@ namespace Utilities
 	public static class GlobalUtility
 	{
 		public const float LOWEST_DAMAGE = 1f;
-		public const float COMBAT_RESOLVE_SEC = 0.5f;
 
 		private const float _MIN_HP = 50f;
 		private const float _MIN_ATK = 50f;
@@ -17,8 +16,8 @@ namespace Utilities
 		private const float _MAX_HP = 100f;
 		private const float _MAX_ATK = 100f;
 		private const float _MAX_DEF = 100f;
-
 		private static Sprite[] _SPRITE_RESOURCES;
+
 
 		public static float RandomHp() => Random.Range(_MIN_HP, _MAX_HP);
 		public static float RandomAtk() => Random.Range(_MIN_ATK, _MAX_ATK);
