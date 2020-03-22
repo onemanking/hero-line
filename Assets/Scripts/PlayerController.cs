@@ -37,10 +37,8 @@ public class PlayerController : MonoBehaviour
 		HeroList = new List<Hero>();
 		HeroLinePositionList = new List<Vector2>();
 
-		Observable.EveryUpdate().Where(_ => Input.GetKeyDown(KeyCode.Z)).Subscribe(_ =>
-		{
-			SwitchHeroLeader(true);
-		}).AddTo(this);
+		Observable.EveryUpdate().Where(_ => Input.GetKeyDown(KeyCode.Z)).Subscribe(_ => RotateHeroLeader(true)).AddTo(this);
+		// Observable.EveryUpdate().Where(_ => Input.GetKeyDown(KeyCode.X)).Subscribe(_ => RotateHeroLeader(false)).AddTo(this); 
 	}
 
 	public void SetControllHero(Hero _hero)
@@ -98,14 +96,18 @@ public class PlayerController : MonoBehaviour
 		}
 	}
 
-	private void SwitchHeroLeader(bool _isNext = true)
+	private void RotateHeroLeader(bool _rotateForward)
 	{
 		if (HeroList.Count <= 1) return;
 
-		ControllHero.SetControllable(false);
-
+		var oldLeader = ControllHero;
 		var newLeader = HeroList[1];
+
+		oldLeader.SetControllable(false);
+
+		HeroList.Rotate(_rotateForward);
+
 		SetControllHero(newLeader);
-		HeroList.Swap(0, 1);
 	}
+
 }

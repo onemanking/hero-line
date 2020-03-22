@@ -18,8 +18,10 @@ namespace Characters
 		private float _Speed = 0.5f;
 		private SpriteRenderer _SpriteRenderer;
 
-		void Start()
+		protected override void Start()
 		{
+			base.Start();
+
 			_SpriteRenderer = GetComponent<SpriteRenderer>();
 
 			SetStartDirection(Vector2.right);
@@ -63,15 +65,9 @@ namespace Characters
 			}
 		}
 
-		internal void SetFacing(Vector2 _direction)
-		{
-			Direction = _direction;
-		}
+		internal void SetFacing(Vector2 _direction) => Direction = _direction;
 
-		internal void SetControllable(bool _controllable)
-		{
-			_Controllable = _controllable;
-		}
+		internal void SetControllable(bool _controllable) => _Controllable = _controllable;
 
 		private IDisposable _MoveDisposable;
 		private void Move()
@@ -94,14 +90,9 @@ namespace Characters
 			if (_other.tag == GameManager.TagHero)
 				PlayerController.Instance.AddHero(_other.GetComponent<Hero>());
 			else if (_other.tag == GameManager.TagEnemy)
-				FightEnemy();
+				FightEnemy(_other.GetComponent<Character>());
 			else
 				HitWall();
-		}
-
-		private void FightEnemy()
-		{
-			throw new NotImplementedException();
 		}
 
 		private void HitWall()

@@ -11,15 +11,22 @@ namespace Characters
 
 	public class Character : MonoBehaviour
 	{
-		[Header("STAT")]
 		protected FloatReactiveProperty Hp = new FloatReactiveProperty();
 		protected FloatReactiveProperty Atk = new FloatReactiveProperty();
 		protected FloatReactiveProperty Def = new FloatReactiveProperty();
 		protected Type Type;
 
-		private void Start()
+		protected virtual void Start()
 		{
+			GetComponent<SpriteRenderer>().sprite = GlobalUtility.RandomSprite();
+
 			GenarateStats();
+		}
+
+		protected void FightEnemy(Character _other)
+		{
+			var damage = CalculateDamage(_other.Atk.Value);
+			TakeDamage(damage);
 		}
 
 		private void GenarateStats()
@@ -31,5 +38,10 @@ namespace Characters
 		}
 
 		protected void TakeDamage(float _damage) => Hp.Value -= _damage;
+
+		private float CalculateDamage(float _atk)
+		{
+			return _atk - Def.Value;
+		}
 	}
 }
